@@ -1,0 +1,22 @@
+# Bí mật & cấu hình cục bộ
+.env
+.env.local
+backend/.env
+frontend/.env.local
+# Thư viện & build (rất nặng)
+node_modules/
+frontend/node_modules/
+frontend/.next/
+contracts/out/
+contracts/cache/
+__pycache__/
+*.pyc
+.venv/
+venv/
+# Dữ liệu runtime cục bộ
+*.db
+*.sqlite
+*.sqlite3
+anvil_state.json
+storage/
+backend/storage/
