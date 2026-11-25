@@ -1036,6 +1036,13 @@ export const EN_SUPPLEMENT_MAP: Array<[string, string]> = [
   ["Đóng đợt bán sơ cấp", "Close Primary Sale"],
   ["GIÁM SÁT HẠ TẦNG TRỰC TIẾP", "LIVE INFRASTRUCTURE HEALTH CHECK"],
   ["Không có lỗi", "No errors"],
+  ["Xóa hồ sơ", "Delete Draft"],
+  ["Xác nhận xóa hồ sơ bất động sản", "Confirm Real Estate Draft Deletion"],
+  ["Thao tác này sẽ xóa vĩnh viễn bản ghi nháp khỏi hệ thống", "This action will permanently remove the draft record from the system"],
+  ["Hồ sơ chưa được triển khai lên Blockchain nên có thể xóa an toàn. Thao tác xóa sẽ được ghi nhận vào Nhật ký quản trị hệ thống.", "This profile has not been deployed on-chain and can be safely deleted. The deletion will be recorded in the Admin Audit Log."],
+  ["Xác nhận xóa", "Confirm Delete"],
+  ["Đang xóa...", "Deleting..."],
+  ["Xóa hồ sơ BĐS nháp", "Delete Draft Asset"],
   ["Vui lòng đăng nhập tài khoản để truy cập chức năng này!", "Please sign in to access this feature!"],
   ["BĐS", "Real Estate"],
 ];

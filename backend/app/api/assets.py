@@ -1,3 +1,4 @@
+import datetime
 import html as html_lib
 import os
 from typing import List, Optional
@@ -6,7 +7,16 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from ..services.w3_compat import Web3
 from ..database import get_db
-from ..models import User, RealEstate, PrimarySaleCache, TransferCache, AuditSign
+from ..models import (
+    User,
+    RealEstate,
+    PrimarySaleCache,
+    ListingCache,
+    TransferCache,
+    AuditSign,
+    DividendDistribution,
+    DividendPayout,
+)
 from ..schemas import RealEstateCreateRequest, ValuationUpdateRequest
 from ..services.auth import get_current_user
 from ..services.ipfs import upload_to_ipfs, compute_doc_hash, LOCAL_IPFS_CACHE_DIR
@@ -22,6 +32,7 @@ from ..services.listener import record_transfer_cache, sync_onchain_state
 from ..config import load_deployed_contracts, settings
 
 router = APIRouter(prefix="/assets", tags=["3. Quản lý & Token hóa Bất động sản (UC-04, UC-05, UC-07, UC-14)"])
+real_estates_router = APIRouter(prefix="/real-estates", tags=["3. Quản lý & Token hóa Bất động sản (UC-04, UC-05, UC-07, UC-14)"])
 
 
 def _serialize_estate(est: RealEstate, db: Session, extra_tx_hash: Optional[str] = None) -> dict:
@@ -856,4 +867,94 @@ def update_real_estate_valuation(
         "tx_hash": res["tx_hash"],
         "block_number": res.get("block_number", 1),
         "real_estate": _serialize_estate(est, db),
+    }
+
+
+@real_estates_router.delete("/{real_estate_id}")
+@router.delete("/{real_estate_id}")
+def delete_real_estate(
+    real_estate_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Xóa hồ sơ BĐS chưa token hóa khỏi cơ sở dữ liệu.
+    - Chỉ cho phép vai trò `admin` hoặc `issuer` (chủ sở hữu BĐS đó).
+    - Chặn tuyệt đối nếu BĐS đã có `token_address` hoặc trạng thái khác bản nháp/chờ token hóa.
+    - Ghi nhận vào bảng `audit_signs` với mã hành động `OFFCHAIN_DELETE_ASSET`.
+    """
+    if current_user.role_label not in ("admin", "issuer"):
+        raise HTTPException(
+            status_code=403,
+            detail="Chỉ Đơn vị phát hành (chủ sở hữu) hoặc Quản trị viên mới có quyền xóa hồ sơ bất động sản!",
+        )
+
+    est = db.query(RealEstate).filter(RealEstate.id == real_estate_id).first()
+    if not est:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ bất động sản!")
+
+    if current_user.role_label == "issuer" and est.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Bạn chỉ có quyền xóa các hồ sơ bất động sản do chính mình đăng ký!",
+        )
+
+    if est.token_address or (est.status or "").lower() not in ("draft", "ready_to_tokenize"):
+        raise HTTPException(
+            status_code=400,
+            detail="Không thể xóa bất động sản đã token hóa trên Blockchain",
+        )
+
+    est_id = est.id
+    est_name = est.name
+    est_symbol = est.symbol
+    est_doc_cid = est.doc_cid
+    est_status = est.status
+
+    # Dọn sạch mọi bản ghi phụ thuộc (nếu có) trước khi xóa RealEstate
+    db.query(PrimarySaleCache).filter(PrimarySaleCache.real_estate_id == est_id).delete()
+    db.query(ListingCache).filter(ListingCache.real_estate_id == est_id).delete()
+    dist_ids = [
+        d.id
+        for d in db.query(DividendDistribution.id)
+        .filter(DividendDistribution.real_estate_id == est_id)
+        .all()
+    ]
+    if dist_ids:
+        db.query(DividendPayout).filter(DividendPayout.distribution_id.in_(dist_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(DividendDistribution).filter(
+            DividendDistribution.real_estate_id == est_id
+        ).delete()
+
+    offchain_ref = f"OFFCHAIN_DELETE_ASSET_{est_id}_{int(datetime.datetime.utcnow().timestamp())}"
+    audit = AuditSign(
+        user_id=current_user.id,
+        signer_address=current_user.address,
+        role_label=current_user.role_label,
+        contract_method="OFFCHAIN_DELETE_ASSET",
+        params_json={
+            "action": "OFFCHAIN_DELETE_ASSET",
+            "real_estate_id": est_id,
+            "name": est_name,
+            "symbol": est_symbol,
+            "doc_cid": est_doc_cid,
+            "previous_status": est_status,
+            "reason": "Xóa hồ sơ bất động sản chưa token hóa (off-chain)",
+        },
+        tx_hash=offchain_ref,
+    )
+    db.add(audit)
+    db.delete(est)
+    db.commit()
+
+    return {
+        "deleted": True,
+        "id": est_id,
+        "name": est_name,
+        "symbol": est_symbol,
+        "action": "OFFCHAIN_DELETE_ASSET",
+        "tx_hash": offchain_ref,
+        "message": f"Đã xóa hồ sơ bất động sản '{est_name} ({est_symbol})' thành công!",
     }

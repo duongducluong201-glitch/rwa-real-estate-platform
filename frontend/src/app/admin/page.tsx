@@ -60,6 +60,7 @@ import {
   UserCheck,
   UserX,
   FileCheck,
+  Trash2,
 } from "lucide-react";
 
 const DOC_TYPE_PILLS: Array<{ label: string; bg: string }> = [
@@ -286,6 +287,7 @@ export default function AdminDashboardPage() {
   const [issuerPreviewModalOpen, setIssuerPreviewModalOpen] = useState<boolean>(false);
   const [registeredPendingAsset, setRegisteredPendingAsset] = useState<any | null>(null);
   const [tokenizeConfirmAsset, setTokenizeConfirmAsset] = useState<any | null>(null);
+  const [deleteEstateModal, setDeleteEstateModal] = useState<any | null>(null);
   const [lastTokenizeReceipt, setLastTokenizeReceipt] = useState<any | null>(null);
 
   // Dữ liệu tổng hợp cho Issuer Dashboard, Quản lý Mở bán, Hồ sơ Pháp lý, Báo cáo
@@ -1794,6 +1796,13 @@ export default function AdminDashboardPage() {
         code: "CLOSE_SALE",
         label: "Đóng đợt bán sơ cấp",
         badge: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20",
+      };
+    }
+    if (method === "OFFCHAIN_DELETE_ASSET") {
+      return {
+        code: "DELETE_ASSET",
+        label: "Xóa hồ sơ BĐS nháp",
+        badge: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/20",
       };
     }
     return {
@@ -5531,14 +5540,25 @@ export default function AdminDashboardPage() {
                           </Link>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => setTokenizeConfirmAsset(e)}
-                          disabled={busy}
-                          className="w-full rounded bg-blue-600 hover:bg-blue-700 px-3 py-2 font-bold text-white transition"
-                        >
-                          Bước 6: Xác nhận Token hóa (AssetFactory.createAsset)
-                        </button>
+                        <div className="space-y-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setTokenizeConfirmAsset(e)}
+                            disabled={busy}
+                            className="w-full rounded bg-blue-600 hover:bg-blue-700 px-3 py-2 font-bold text-white transition"
+                          >
+                            Bước 6: Xác nhận Token hóa (AssetFactory.createAsset)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteEstateModal(e)}
+                            disabled={busy}
+                            className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/70 hover:bg-rose-100 px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                            <span>Xóa hồ sơ</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -6379,9 +6399,21 @@ export default function AdminDashboardPage() {
                           </td>
                           <td className="py-3.5 px-4 text-right whitespace-nowrap">
                             {!a.token_address ? (
-                              <StatusBadge variant="warning" dot>
-                                Chờ Token hóa
-                              </StatusBadge>
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <StatusBadge variant="warning" dot>
+                                  Chờ Token hóa
+                                </StatusBadge>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeleteEstateModal(a)}
+                                  disabled={busy}
+                                  title="Xóa hồ sơ bất động sản chưa token hóa"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/70 hover:bg-rose-100 text-[11px] font-medium transition-colors disabled:opacity-50"
+                                >
+                                  <Trash2 className="w-3 h-3" strokeWidth={1.75} />
+                                  <span>Xóa hồ sơ</span>
+                                </button>
+                              </div>
                             ) : a.is_paused ? (
                               <StatusBadge variant="danger" dot>
                                 Tạm dừng
@@ -8805,6 +8837,94 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
+      {/* Modal Xác nhận Xóa Hồ sơ BĐS chưa token hóa */}
+      {deleteEstateModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" strokeWidth={1.75} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Xác nhận xóa hồ sơ bất động sản
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Thao tác này sẽ xóa vĩnh viễn bản ghi nháp khỏi hệ thống
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDeleteEstateModal(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Tên bất động sản:</span>
+                <strong className="text-slate-900 font-semibold text-right">
+                  {deleteEstateModal.name}
+                </strong>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Mã Token (Symbol):</span>
+                <strong className="font-mono text-slate-900">{deleteEstateModal.symbol}</strong>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Hồ sơ chưa được triển khai lên Blockchain nên có thể xóa an toàn. Thao tác xóa sẽ được ghi nhận vào Nhật ký quản trị hệ thống.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDeleteEstateModal(null)}
+                className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  if (!deleteEstateModal) return;
+                  setBusy(true);
+                  try {
+                    const res = await apiFetch(`/real-estates/${deleteEstateModal.id}`, {
+                      method: "DELETE",
+                    });
+                    setDeleteEstateModal(null);
+                    await loadAdminData();
+                    showToast(
+                      "ok",
+                      res?.message ||
+                        `Đã xóa hồ sơ bất động sản ${deleteEstateModal.name} (${deleteEstateModal.symbol}) thành công!`
+                    );
+                  } catch (err: any) {
+                    setDeleteEstateModal(null);
+                    showToast("err", err?.message || "Không thể xóa hồ sơ bất động sản!");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium shadow-xs transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <span>{busy ? "Đang xóa..." : "Xác nhận xóa"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Xem Tài Liệu Word (.docx) IPFS Trực Tiếp Tại Web */}
       <IpfsWordViewerModal
         open={previewEstateDocId !== null}

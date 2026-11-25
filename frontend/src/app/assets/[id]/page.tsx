@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useWeb3 } from "@/context/Web3Context";
 import { formatEventTypeLabel, formatPropertyKindLabel } from "@/i18n/labels";
@@ -30,6 +30,7 @@ import {
   MapPin,
   X,
   LogIn,
+  Trash2,
 } from "lucide-react";
 
 function getEventBadgeVariant(eventType?: string): "success" | "info" | "purple" | "neutral" {
@@ -41,6 +42,7 @@ function getEventBadgeVariant(eventType?: string): "success" | "info" | "purple"
 
 export default function AssetDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const estateId = params?.id as string;
 
   const {
@@ -102,6 +104,34 @@ export default function AssetDetailPage() {
     description: string;
   } | null>(null);
   const [selectedTxDetail, setSelectedTxDetail] = useState<any | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
+
+  const handleConfirmDeleteEstate = async () => {
+    if (!estate) return;
+    setBusy(true);
+    setStatusMsg(null);
+    try {
+      const res = await apiFetch(`/real-estates/${estate.id}`, {
+        method: "DELETE",
+      });
+      setDeleteConfirmOpen(false);
+      setStatusMsg({
+        type: "ok",
+        text: res?.message || `Đã xóa hồ sơ bất động sản ${estate.name} (${estate.symbol}) thành công!`,
+      });
+      setTimeout(() => {
+        router.push("/assets");
+      }, 900);
+    } catch (err: any) {
+      setDeleteConfirmOpen(false);
+      setStatusMsg({
+        type: "err",
+        text: err?.message || "Không thể xóa hồ sơ bất động sản!",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const copyToClipboard = (text: string) => {
     if (!text) return;
@@ -381,6 +411,22 @@ export default function AssetDetailPage() {
     Number(openSaleAmount) > 0 && Number(openSaleAmount) <= totalShares;
   const isSalePriceValid = Number(openSalePrice) > 0;
 
+  const canDeleteCurrentEstate =
+    isAuthenticated &&
+    Boolean(currentUser) &&
+    !estate.token_address &&
+    ["draft", "ready_to_tokenize"].includes(
+      String(estate.status || "ready_to_tokenize").toLowerCase()
+    ) &&
+    (currentUser?.role_label === "admin" ||
+      (currentUser?.role_label === "issuer" &&
+        (estate.created_by === currentUser.id ||
+          Boolean(
+            estate.issuer_address &&
+              currentUser.address &&
+              estate.issuer_address.toLowerCase() === currentUser.address.toLowerCase()
+          ))));
+
   return (
     <div className="space-y-6">
       {/* Top Bar */}
@@ -393,6 +439,17 @@ export default function AssetDetailPage() {
           <span>Quay lại Danh mục Bất động sản</span>
         </Link>
         <div className="flex items-center gap-2">
+          {canDeleteCurrentEstate && (
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(true)}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/70 hover:bg-rose-100 text-xs font-medium transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+              <span>Xóa hồ sơ</span>
+            </button>
+          )}
           {role === "issuer" && (
             <Link
               href="/admin?tab=issuer-dashboard"
@@ -1118,6 +1175,17 @@ export default function AssetDetailPage() {
                   >
                     Xác nhận Token hóa (AssetFactory)
                   </button>
+                  {canDeleteCurrentEstate && (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      disabled={busy}
+                      className="w-full inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/70 hover:bg-rose-100 px-4 py-2 text-xs font-medium transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      <span>Xóa hồ sơ</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>
@@ -1511,6 +1579,72 @@ export default function AssetDetailPage() {
                   {selectedTxDetail.tx_hash}
                 </code>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL XÁC NHẬN XÓA HỒ SƠ BĐS CHƯA TOKEN HÓA */}
+      {deleteConfirmOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" strokeWidth={1.75} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Xác nhận xóa hồ sơ bất động sản
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Thao tác này sẽ xóa vĩnh viễn bản ghi nháp khỏi hệ thống
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Tên bất động sản:</span>
+                <strong className="text-slate-900 font-semibold text-right">{estate.name}</strong>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Mã Token (Symbol):</span>
+                <strong className="font-mono text-slate-900">{estate.symbol}</strong>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Hồ sơ chưa được triển khai lên Blockchain nên có thể xóa an toàn. Thao tác xóa sẽ được ghi nhận vào Nhật ký quản trị hệ thống.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDeleteConfirmOpen(false)}
+                className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleConfirmDeleteEstate}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium shadow-xs transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <span>{busy ? "Đang xóa..." : "Xác nhận xóa"}</span>
+              </button>
             </div>
           </div>
         </div>

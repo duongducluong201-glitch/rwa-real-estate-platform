@@ -21,6 +21,10 @@ import {
   List,
   ShoppingBag,
   Settings2,
+  Trash2,
+  X,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 const PROPERTY_KIND_PILLS: Record<
@@ -45,8 +49,8 @@ const PROPERTY_KIND_PILLS: Record<
 };
 
 export default function AssetsListPage() {
-  const { apiFetch, currentUser } = useWeb3();
-  const role = currentUser?.role_label || "investor";
+  const { apiFetch, currentUser, isAuthenticated } = useWeb3();
+  const role = isAuthenticated && currentUser ? currentUser.role_label : "investor";
 
   const [estates, setEstates] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
@@ -58,6 +62,54 @@ export default function AssetsListPage() {
   const [page, setPage] = useState<number>(1);
   const PAGE_SIZE = 6;
   const [loading, setLoading] = useState<boolean>(true);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState<boolean>(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
+  const canDeleteEstate = (est: any): boolean => {
+    if (!isAuthenticated || !currentUser) return false;
+    const isUntokenized =
+      !est.token_address &&
+      ["draft", "ready_to_tokenize"].includes(String(est.status || "ready_to_tokenize").toLowerCase());
+    if (!isUntokenized) return false;
+    if (currentUser.role_label === "admin") return true;
+    if (currentUser.role_label === "issuer") {
+      return (
+        est.created_by === currentUser.id ||
+        Boolean(
+          est.issuer_address &&
+            currentUser.address &&
+            est.issuer_address.toLowerCase() === currentUser.address.toLowerCase()
+        )
+      );
+    }
+    return false;
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setFeedbackMsg(null);
+    try {
+      const res = await apiFetch(`/real-estates/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      setDeleteTarget(null);
+      await loadEstates();
+      setFeedbackMsg({
+        type: "ok",
+        text: res?.message || `Đã xóa hồ sơ bất động sản ${deleteTarget.name} (${deleteTarget.symbol}) thành công!`,
+      });
+    } catch (err: any) {
+      setFeedbackMsg({
+        type: "err",
+        text: err?.message || "Không thể xóa hồ sơ bất động sản!",
+      });
+      setDeleteTarget(null);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     if (!userToggledView) {
@@ -198,6 +250,33 @@ export default function AssetsListPage() {
           )}
         </div>
       </div>
+
+      {/* Feedback Banner */}
+      {feedbackMsg && (
+        <div
+          className={`rounded-xl border px-4 py-3 text-xs font-medium flex items-center justify-between shadow-xs ${
+            feedbackMsg.type === "ok"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-rose-200 bg-rose-50 text-rose-700"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {feedbackMsg.type === "ok" ? (
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" strokeWidth={1.75} />
+            ) : (
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" strokeWidth={1.75} />
+            )}
+            <span>{feedbackMsg.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFeedbackMsg(null)}
+            className="ml-4 p-1 rounded hover:bg-black/5 transition-colors"
+          >
+            <X className="w-4 h-4" strokeWidth={1.75} />
+          </button>
+        </div>
+      )}
 
       {/* Filters & Search Toolbar Card */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-xs px-4 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -424,21 +503,45 @@ export default function AssetsListPage() {
                           </Link>
                         </>
                       ) : role === "issuer" ? (
-                        <Link
-                          href={`/assets/${est.id}`}
-                          className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium shadow-xs transition-colors whitespace-nowrap"
-                        >
-                          <Settings2 className="w-4 h-4 text-blue-600" strokeWidth={1.75} />
-                          <span>Quản lý &amp; Mở bán</span>
-                        </Link>
+                        <>
+                          <Link
+                            href={`/assets/${est.id}`}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium shadow-xs transition-colors whitespace-nowrap"
+                          >
+                            <Settings2 className="w-4 h-4 text-blue-600" strokeWidth={1.75} />
+                            <span>Quản lý &amp; Mở bán</span>
+                          </Link>
+                          {canDeleteEstate(est) && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(est)}
+                              className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/70 hover:bg-rose-100 text-xs font-medium transition-colors whitespace-nowrap shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                              <span>Xóa hồ sơ</span>
+                            </button>
+                          )}
+                        </>
                       ) : (
-                        <Link
-                          href={`/assets/${est.id}`}
-                          className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium shadow-xs transition-colors whitespace-nowrap"
-                        >
-                          <Eye className="w-4 h-4 text-slate-500" strokeWidth={1.75} />
-                          <span>Xem chi tiết BĐS</span>
-                        </Link>
+                        <>
+                          <Link
+                            href={`/assets/${est.id}`}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-medium shadow-xs transition-colors whitespace-nowrap"
+                          >
+                            <Eye className="w-4 h-4 text-slate-500" strokeWidth={1.75} />
+                            <span>Xem chi tiết BĐS</span>
+                          </Link>
+                          {canDeleteEstate(est) && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(est)}
+                              className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/70 hover:bg-rose-100 text-xs font-medium transition-colors whitespace-nowrap shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                              <span>Xóa hồ sơ</span>
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -587,6 +690,18 @@ export default function AssetsListPage() {
                                 Quản lý
                               </Link>
                             )}
+
+                            {canDeleteEstate(est) && (
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(est)}
+                                title="Xóa hồ sơ bất động sản chưa token hóa"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/70 hover:bg-rose-100 text-xs font-medium transition-colors whitespace-nowrap"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                                <span>Xóa hồ sơ</span>
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -640,6 +755,77 @@ export default function AssetsListPage() {
           </button>
         </div>
       </div>
+      {/* Modal Xác nhận Xóa hồ sơ BĐS chưa token hóa */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-[2px] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                  <Trash2 className="w-5 h-5" strokeWidth={1.75} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900">
+                    Xác nhận xóa hồ sơ bất động sản
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Thao tác này sẽ xóa vĩnh viễn bản ghi nháp khỏi hệ thống
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-4 h-4" strokeWidth={1.75} />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs space-y-1.5">
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Tên bất động sản:</span>
+                <strong className="text-slate-900 font-semibold text-right">{deleteTarget.name}</strong>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Mã Token (Symbol):</span>
+                <strong className="font-mono text-slate-900">{deleteTarget.symbol}</strong>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Trạng thái hiện tại:</span>
+                <StatusBadge variant="warning" dot>
+                  Chờ Token hóa
+                </StatusBadge>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Hồ sơ chưa được triển khai lên Blockchain nên có thể xóa an toàn. Thao tác xóa sẽ được ghi nhận vào Nhật ký quản trị hệ thống.
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-medium text-slate-700 transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={handleConfirmDelete}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-medium shadow-xs transition-colors disabled:opacity-50"
+              >
+                <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
+                <span>{deleting ? "Đang xóa..." : "Xác nhận xóa"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

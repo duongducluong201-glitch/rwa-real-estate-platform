@@ -121,6 +121,7 @@ for prefix in ["/api", ""]:
     app.include_router(auth.router, prefix=prefix)
     app.include_router(kyc.router, prefix=prefix)
     app.include_router(assets.router, prefix=prefix)
+    app.include_router(assets.real_estates_router, prefix=prefix)
     app.include_router(transactions.router, prefix=prefix)
     app.include_router(notifications.router, prefix=prefix)
     app.include_router(dividends.router, prefix=prefix)
